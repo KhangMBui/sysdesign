@@ -1,0 +1,41 @@
+@import 'tailwindcss';
+
+/* App theme tokens. Indigo accent, neutral slate surfaces —
+   clean and practical for a study tool. */
+@theme {
+  --color-accent: #4f46e5;
+  --color-accent-hover: #4338ca;
+  --color-ink: #0f172a;
+  --color-muted: #64748b;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #f8fafc;
+  color: var(--color-ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Consistent focus ring for keyboard users. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+textarea,
+input,
+select {
+  font-family: inherit;
+}
