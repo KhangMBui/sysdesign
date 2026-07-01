@@ -12,6 +12,12 @@ export interface Requirement {
   text: string;
 }
 
+export interface ApiStatusCode {
+  id: string;
+  code: string;
+  responseBody: string;
+}
+
 export interface ApiEndpoint {
   id: string;
   method: HttpMethod;
@@ -20,6 +26,7 @@ export interface ApiEndpoint {
   responseBody: string;
   auth: string;
   notes: string;
+  statusCodes?: ApiStatusCode[];
 }
 
 export interface Problem {
@@ -46,6 +53,7 @@ export interface DesignPage {
   title: string;
   order: number;
   scene: unknown;
+  notes?: string;
   createdAt: number;
   updatedAt: number;
 }

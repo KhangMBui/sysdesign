@@ -1,6 +1,6 @@
 import { db } from './database';
 import { newId } from '../lib/id';
-import type { Problem, ApiEndpoint } from './types';
+import type { Problem, ApiEndpoint, ApiStatusCode, DeepDive } from './types';
 
 // ---- Problems -------------------------------------------------------------
 
@@ -128,6 +128,36 @@ export async function reorderRequirements(
 
 export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 
+export const HTTP_STATUS_CODES = [
+  { code: '100', label: '100 Continue' },
+  { code: '101', label: '101 Switching Protocols' },
+  { code: '200', label: '200 OK' },
+  { code: '201', label: '201 Created' },
+  { code: '202', label: '202 Accepted' },
+  { code: '204', label: '204 No Content' },
+  { code: '206', label: '206 Partial Content' },
+  { code: '301', label: '301 Moved Permanently' },
+  { code: '302', label: '302 Found' },
+  { code: '304', label: '304 Not Modified' },
+  { code: '307', label: '307 Temporary Redirect' },
+  { code: '308', label: '308 Permanent Redirect' },
+  { code: '400', label: '400 Bad Request' },
+  { code: '401', label: '401 Unauthorized' },
+  { code: '403', label: '403 Forbidden' },
+  { code: '404', label: '404 Not Found' },
+  { code: '405', label: '405 Method Not Allowed' },
+  { code: '409', label: '409 Conflict' },
+  { code: '410', label: '410 Gone' },
+  { code: '412', label: '412 Precondition Failed' },
+  { code: '422', label: '422 Unprocessable Entity' },
+  { code: '429', label: '429 Too Many Requests' },
+  { code: '500', label: '500 Internal Server Error' },
+  { code: '501', label: '501 Not Implemented' },
+  { code: '502', label: '502 Bad Gateway' },
+  { code: '503', label: '503 Service Unavailable' },
+  { code: '504', label: '504 Gateway Timeout' },
+];
+
 export async function addApiEndpoint(problemId: string): Promise<string> {
   const id = newId('ep');
   await db.problems
@@ -136,7 +166,7 @@ export async function addApiEndpoint(problemId: string): Promise<string> {
     .modify((p) => {
       p.apiEndpoints = [
         ...p.apiEndpoints,
-        { id, method: 'GET', path: '', requestBody: '', responseBody: '', auth: '', notes: '' },
+        { id, method: 'GET', path: '', requestBody: '', responseBody: '', auth: '', notes: '', statusCodes: [] },
       ];
       p.updatedAt = Date.now();
     });
@@ -185,6 +215,164 @@ export async function reorderApiEndpoints(
         .filter((e): e is NonNullable<typeof e> => Boolean(e));
       p.updatedAt = Date.now();
     });
+}
+
+export async function addApiStatusCode(
+  problemId: string,
+  endpointId: string,
+): Promise<string> {
+  const id = newId('sc');
+  await db.problems
+    .where('id')
+    .equals(problemId)
+    .modify((p) => {
+      const ep = p.apiEndpoints.find((e) => e.id === endpointId);
+      if (ep) {
+        ep.statusCodes = [...(ep.statusCodes ?? []), { id, code: '200', responseBody: '' }];
+      }
+      p.updatedAt = Date.now();
+    });
+  return id;
+}
+
+export async function updateApiStatusCode(
+  problemId: string,
+  endpointId: string,
+  statusCodeId: string,
+  changes: Partial<ApiStatusCode>,
+): Promise<void> {
+  await db.problems
+    .where('id')
+    .equals(problemId)
+    .modify((p) => {
+      const ep = p.apiEndpoints.find((e) => e.id === endpointId);
+      if (ep) {
+        const sc = (ep.statusCodes ?? []).find((s) => s.id === statusCodeId);
+        if (sc) Object.assign(sc, changes);
+      }
+      p.updatedAt = Date.now();
+    });
+}
+
+export async function deleteApiStatusCode(
+  problemId: string,
+  endpointId: string,
+  statusCodeId: string,
+): Promise<void> {
+  await db.problems
+    .where('id')
+    .equals(problemId)
+    .modify((p) => {
+      const ep = p.apiEndpoints.find((e) => e.id === endpointId);
+      if (ep) {
+        ep.statusCodes = (ep.statusCodes ?? []).filter((s) => s.id !== statusCodeId);
+      }
+      p.updatedAt = Date.now();
+    });
+}
+
+// ---- Design Pages ---------------------------------------------------------
+// Each DesignPage holds one Excalidraw scene serialized to JSON. Stored in
+// its own table (not embedded on Problem) because scenes can be large.
+
+export async function createDesignPage(
+  problemId: string,
+  title = 'Design v1',
+): Promise<string> {
+  const now = Date.now();
+  const id = newId('dp');
+  const order = await db.designPages.where('problemId').equals(problemId).count();
+  await db.designPages.add({ id, problemId, title, order, scene: null, createdAt: now, updatedAt: now });
+  return id;
+}
+
+export async function updateDesignPageScene(id: string, scene: unknown): Promise<void> {
+  await db.designPages.update(id, { scene, updatedAt: Date.now() });
+}
+
+export async function updateDesignPageNotes(id: string, notes: string): Promise<void> {
+  await db.designPages.update(id, { notes, updatedAt: Date.now() });
+}
+
+export async function renameDesignPage(id: string, title: string): Promise<void> {
+  await db.designPages.update(id, { title, updatedAt: Date.now() });
+}
+
+export async function deleteDesignPage(id: string): Promise<void> {
+  await db.designPages.delete(id);
+}
+
+export async function reorderDesignPages(
+  problemId: string,
+  orderedIds: string[],
+): Promise<void> {
+  const now = Date.now();
+  await db.transaction('rw', db.designPages, async () => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.designPages
+        .where('id')
+        .equals(orderedIds[i])
+        .modify((p) => {
+          if (p.problemId === problemId) {
+            p.order = i;
+            p.updatedAt = now;
+          }
+        });
+    }
+  });
+}
+
+// ---- Deep Dives -----------------------------------------------------------
+// Large independent records (prompts + responses can be long) stored in their
+// own table, keyed by problemId and sorted by `order`.
+
+export async function createDeepDive(problemId: string): Promise<string> {
+  const now = Date.now();
+  const id = newId('dd');
+  const order = await db.deepDives.where('problemId').equals(problemId).count();
+  await db.deepDives.add({
+    id,
+    problemId,
+    title: '',
+    prompt: '',
+    response: '',
+    notes: '',
+    order,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return id;
+}
+
+export async function updateDeepDive(
+  id: string,
+  changes: Partial<DeepDive>,
+): Promise<void> {
+  await db.deepDives.update(id, { ...changes, updatedAt: Date.now() });
+}
+
+export async function deleteDeepDive(id: string): Promise<void> {
+  await db.deepDives.delete(id);
+}
+
+export async function reorderDeepDives(
+  problemId: string,
+  orderedIds: string[],
+): Promise<void> {
+  const now = Date.now();
+  await db.transaction('rw', db.deepDives, async () => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.deepDives
+        .where('id')
+        .equals(orderedIds[i])
+        .modify((d) => {
+          if (d.problemId === problemId) {
+            d.order = i;
+            d.updatedAt = now;
+          }
+        });
+    }
+  });
 }
 
 // ---- Seed -----------------------------------------------------------------

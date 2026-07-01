@@ -1,9 +1,13 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useProblem } from '../hooks/useProblems';
+import { useDesignPages } from '../hooks/useDesignPages';
+import { useDeepDives } from '../hooks/useDeepDives';
 import { updateProblem } from '../db/repository';
 import { DifficultyBadge, inputClass } from '../components/ui';
 import RequirementsSection from '../sections/RequirementsSection';
 import ApiDesignSection from '../sections/ApiDesignSection';
+import DesignSection from '../sections/DesignSection';
+import DeepDivesSection from '../sections/DeepDivesSection';
 import type { Problem } from '../db/types';
 
 // The practice workflow is broken into sections, mirroring a real
@@ -24,6 +28,8 @@ export default function ProblemDetailPage() {
   const { problemId, section } = useParams();
   const navigate = useNavigate();
   const problem = useProblem(problemId);
+  const designPages = useDesignPages(problemId);
+  const deepDives = useDeepDives(problemId);
   const active: SectionKey =
     (SECTIONS.find((s) => s.key === section)?.key as SectionKey) ?? 'overview';
 
@@ -48,8 +54,8 @@ export default function ProblemDetailPage() {
     functional: problem.functionalReqs.length,
     nonfunctional: problem.nonFunctionalReqs.length,
     api: problem.apiEndpoints.length,
-    design: null,
-    deepdives: null,
+    design: designPages?.length ?? null,
+    deepdives: deepDives?.length ?? null,
   };
 
   return (
@@ -115,6 +121,10 @@ export default function ProblemDetailPage() {
         />
       ) : active === 'api' ? (
         <ApiDesignSection problem={problem} />
+      ) : active === 'design' ? (
+        <DesignSection problem={problem} />
+      ) : active === 'deepdives' ? (
+        <DeepDivesSection problem={problem} />
       ) : (
         <ComingSoon label={SECTIONS.find((s) => s.key === active)!.label} />
       )}

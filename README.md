@@ -53,8 +53,8 @@ src/
 
 - [x] **Step 1** — Scaffold, data layer, problem list, detail shell + Overview
 - [x] **Step 2** — Functional & non-functional requirements (add/edit/delete/reorder)
-- [ ] Step 3 — API design section
-- [ ] Step 4 — High-level design canvas (Excalidraw) with multiple pages
-- [ ] Step 5 — Deep-dive questions & responses
+- [x] **Step 3** — API design section (add/edit/delete/reorder endpoints)
+- [x] **Step 4** — High-level design canvas (Excalidraw) with multiple pages + component palette
+- [x] **Step 5** — Deep-dive questions & responses
 - [ ] Later — export/import, optional AI feedback
 ```
