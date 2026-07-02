@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import '@excalidraw/excalidraw/index.css';
+import { type ComponentProps, useEffect, useRef, useState } from 'react';
+import {
+  Excalidraw,
+  serializeAsJSON,
+  convertToExcalidrawElements,
+  viewportCoordsToSceneCoords,
+} from '@excalidraw/excalidraw';
 import type { DataModelEntity, EntityField, Problem } from '../db/types';
 import {
   addEntityField,
@@ -10,17 +17,104 @@ import {
   reorderEntityFields,
   updateDataModelEntity,
   updateEntityField,
+  updateProblem,
 } from '../db/repository';
 import { useDataModelEntities } from '../hooks/useDataModelEntities';
 import { useDragReorder } from '../lib/useDragReorder';
 import { inputClass } from '../components/ui';
 
+// ---- Excalidraw types -------------------------------------------------------
+type ExcalidrawAPI = Parameters<
+  NonNullable<ComponentProps<typeof Excalidraw>['excalidrawAPI']>
+>[0];
+type ExcalidrawInitData = ComponentProps<typeof Excalidraw>['initialData'];
+type SkeletonList = NonNullable<Parameters<typeof convertToExcalidrawElements>[0]>;
+
+// ---- Entity box dimensions --------------------------------------------------
+const ENTITY_W = 240;
+const HEADER_H = 36;
+const FIELD_ROW_H = 22;
+const BODY_PAD = 10;
+
+function buildEntityElements(
+  entity: DataModelEntity,
+  x: number,
+  y: number,
+): SkeletonList {
+  const groupId = `ebox-${entity.id}-${Date.now()}`;
+  const bodyH = Math.max(44, entity.fields.length * FIELD_ROW_H + BODY_PAD * 2);
+
+  const fieldItems = entity.fields.map((field, i) => {
+    const prefix = field.isPK ? '★ ' : field.isFK ? '◇ ' : '  ';
+    const tags = [field.isPK && 'PK', field.isFK && 'FK', field.isRequired && 'NN']
+      .filter(Boolean)
+      .join(' ');
+    return {
+      type: 'text' as const,
+      x: x + BODY_PAD,
+      y: y + HEADER_H + BODY_PAD + i * FIELD_ROW_H,
+      text: `${prefix}${field.name || '?'}  ${field.type}${tags ? `  ${tags}` : ''}`,
+      fontSize: 12,
+      fontFamily: 3 as const,
+      textAlign: 'left' as const,
+      strokeColor: '#334155',
+      groupIds: [groupId],
+      locked: true,
+    };
+  });
+
+  return [
+    // Header rectangle with entity name label
+    {
+      type: 'rectangle' as const,
+      x,
+      y,
+      width: ENTITY_W,
+      height: HEADER_H,
+      backgroundColor: '#4f46e5',
+      fillStyle: 'solid' as const,
+      strokeColor: '#3730a3',
+      strokeWidth: 2,
+      roughness: 0,
+      roundness: null,
+      groupIds: [groupId],
+      label: {
+        text: entity.name || 'Unnamed',
+        fontSize: 14,
+        fontFamily: 2 as const,
+        strokeColor: '#ffffff',
+      },
+    },
+    // Body rectangle
+    {
+      type: 'rectangle' as const,
+      x,
+      y: y + HEADER_H,
+      width: ENTITY_W,
+      height: bodyH,
+      backgroundColor: '#eef2ff',
+      fillStyle: 'solid' as const,
+      strokeColor: '#3730a3',
+      strokeWidth: 2,
+      roughness: 0,
+      roundness: null,
+      groupIds: [groupId],
+    },
+    ...fieldItems,
+  ] as SkeletonList;
+}
+
+// ---- Main section -----------------------------------------------------------
+
 interface Props {
   problem: Problem;
 }
 
+type ViewMode = 'schema' | 'diagram';
+
 export default function DataModelSection({ problem }: Props) {
   const entities = useDataModelEntities(problem.id);
+  const [view, setView] = useState<ViewMode>('schema');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusNewId, setFocusNewId] = useState<string | null>(null);
 
@@ -64,14 +158,45 @@ export default function DataModelSection({ problem }: Props) {
 
   return (
     <div>
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-slate-800">Data Model</h2>
-        <p className="mt-0.5 text-sm text-slate-500">
-          Define entities and their fields to sketch out your database schema.
-        </p>
+      {/* Header row with view toggle */}
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Data Model</h2>
+          <p className="mt-0.5 text-sm text-slate-500">
+            Define entities and fields, then switch to Diagram to draw relationships.
+          </p>
+        </div>
+
+        <div className="flex shrink-0 overflow-hidden rounded-lg border border-slate-200 text-sm font-medium">
+          <button
+            onClick={() => setView('schema')}
+            className={`px-3 py-1.5 transition ${
+              view === 'schema'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            Schema
+          </button>
+          <button
+            onClick={() => setView('diagram')}
+            className={`border-l border-slate-200 px-3 py-1.5 transition ${
+              view === 'diagram'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            Diagram
+          </button>
+        </div>
       </div>
 
-      {entities.length === 0 ? (
+      {view === 'diagram' ? (
+        <ErDiagramView
+          problem={problem}
+          entities={entities}
+        />
+      ) : entities.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center">
           <p className="text-sm text-slate-500">No entities yet.</p>
           <button
@@ -87,7 +212,7 @@ export default function DataModelSection({ problem }: Props) {
       ) : (
         <div
           className="flex items-start gap-5"
-          style={{ minHeight: 480, height: 'calc(100vh - 320px)' }}
+          style={{ minHeight: 480, height: 'calc(100vh - 330px)' }}
         >
           {/* Left: entity list */}
           <div className="flex h-full w-56 shrink-0 flex-col">
@@ -110,8 +235,8 @@ export default function DataModelSection({ problem }: Props) {
                   >
                     <span
                       {...dnd.handleProps(entity.id)}
-                      title="Drag to reorder"
                       onClick={(e) => e.stopPropagation()}
+                      title="Drag to reorder"
                       className="shrink-0 cursor-grab touch-none rounded p-0.5 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
                     >
                       <DragIcon />
@@ -178,7 +303,131 @@ export default function DataModelSection({ problem }: Props) {
   );
 }
 
-// ------- EntityEditor -------------------------------------------------------
+// ---- ER Diagram view --------------------------------------------------------
+
+interface ErDiagramProps {
+  problem: Problem;
+  entities: DataModelEntity[];
+}
+
+function ErDiagramView({ problem, entities }: ErDiagramProps) {
+  const apiRef = useRef<ExcalidrawAPI | null>(null);
+
+  function insertEntity(entity: DataModelEntity) {
+    const api = apiRef.current;
+    if (!api) return;
+    const appState = api.getAppState();
+    const center = viewportCoordsToSceneCoords(
+      { clientX: appState.width / 2, clientY: appState.height / 2 },
+      appState,
+    );
+    const totalH = HEADER_H + Math.max(44, entity.fields.length * FIELD_ROW_H + BODY_PAD * 2);
+    const newEls = convertToExcalidrawElements(
+      buildEntityElements(entity, center.x - ENTITY_W / 2, center.y - totalH / 2),
+    );
+    const current = api.getSceneElements();
+    api.updateScene({ elements: [...current, ...newEls] });
+  }
+
+  return (
+    <div
+      className="flex overflow-hidden rounded-xl border border-slate-200"
+      style={{ height: 'calc(100vh - 280px)', minHeight: 480 }}
+    >
+      {/* Entity palette */}
+      <div className="w-44 shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50 p-2">
+        <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Entities
+        </p>
+
+        {entities.length === 0 ? (
+          <p className="px-1 text-xs text-slate-400">
+            Define entities in Schema view first.
+          </p>
+        ) : (
+          entities.map((entity) => (
+            <button
+              key={entity.id}
+              onClick={() => insertEntity(entity)}
+              title={`Insert ${entity.name || 'entity'} table`}
+              className="mb-1 w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-left transition hover:border-indigo-300 hover:shadow-sm"
+            >
+              <div className="truncate text-sm font-medium text-slate-800">
+                {entity.name || 'Unnamed'}
+              </div>
+              <div className="mt-0.5 text-xs text-slate-400">
+                {entity.fields.length} field{entity.fields.length !== 1 ? 's' : ''}
+              </div>
+            </button>
+          ))
+        )}
+
+        <div className="mt-4 border-t border-slate-200 pt-3">
+          <p className="px-1 text-xs text-slate-400 leading-relaxed">
+            Click an entity to stamp it onto the canvas. Draw arrows to show relationships.
+          </p>
+        </div>
+      </div>
+
+      {/* Canvas */}
+      <div className="flex-1 overflow-hidden">
+        <ErCanvas
+          key={problem.id}
+          scene={problem.erDiagramScene}
+          onSave={(json) => updateProblem(problem.id, { erDiagramScene: json })}
+          onApiReady={(api) => {
+            apiRef.current = api;
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ---- Excalidraw canvas wrapper ----------------------------------------------
+
+interface CanvasProps {
+  scene: unknown;
+  onSave: (json: string) => void;
+  onApiReady: (api: ExcalidrawAPI) => void;
+}
+
+function ErCanvas({ scene, onSave, onApiReady }: CanvasProps) {
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [initialData] = useState<ExcalidrawInitData>(() => {
+    if (!scene) return null;
+    try {
+      return JSON.parse(scene as string) as ExcalidrawInitData;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
+
+  return (
+    <Excalidraw
+      initialData={initialData}
+      excalidrawAPI={onApiReady}
+      onChange={(elements, appState, files) => {
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        const els = elements;
+        const state = appState;
+        const fs = files;
+        saveTimerRef.current = setTimeout(() => {
+          onSave(serializeAsJSON(els, state, fs, 'local'));
+        }, 500);
+      }}
+    />
+  );
+}
+
+// ---- EntityEditor -----------------------------------------------------------
 
 interface EditorProps {
   entity: DataModelEntity;
@@ -221,14 +470,15 @@ function EntityEditor({ entity, autoFocusName, onUpdate }: EditorProps) {
         className={`${inputClass} resize-none`}
       />
 
-      {/* Fields table */}
+      {/* Fields */}
       <div>
         <div className="mb-2 flex items-center justify-between">
           <span className="text-sm font-medium text-slate-700">Fields</span>
-          <span className="text-xs text-slate-400">{entity.fields.length} field{entity.fields.length !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-slate-400">
+            {entity.fields.length} field{entity.fields.length !== 1 ? 's' : ''}
+          </span>
         </div>
 
-        {/* Column headers */}
         {entity.fields.length > 0 && (
           <div className="mb-1 flex items-center gap-2 px-1">
             <span className="w-5 shrink-0" />
@@ -238,7 +488,7 @@ function EntityEditor({ entity, autoFocusName, onUpdate }: EditorProps) {
             <span className="w-28 shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400">
               Type
             </span>
-            <span className="flex shrink-0 gap-1">
+            <div className="flex shrink-0 gap-1">
               <span className="w-8 text-center text-xs font-medium uppercase tracking-wide text-slate-400">
                 PK
               </span>
@@ -248,7 +498,7 @@ function EntityEditor({ entity, autoFocusName, onUpdate }: EditorProps) {
               <span className="w-8 text-center text-xs font-medium uppercase tracking-wide text-slate-400">
                 NN
               </span>
-            </span>
+            </div>
             <span className="flex-1 text-xs font-medium uppercase tracking-wide text-slate-400">
               Notes
             </span>
@@ -292,7 +542,7 @@ function EntityEditor({ entity, autoFocusName, onUpdate }: EditorProps) {
   );
 }
 
-// ------- FieldRow -----------------------------------------------------------
+// ---- FieldRow ---------------------------------------------------------------
 
 interface FieldRowProps {
   field: EntityField;
@@ -328,7 +578,6 @@ function FieldRow({
         isDragging ? 'opacity-40' : ''
       } ${isOver ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-slate-200'}`}
     >
-      {/* Drag handle */}
       <span
         {...handleProps}
         title="Drag to reorder"
@@ -337,7 +586,6 @@ function FieldRow({
         <DragIcon />
       </span>
 
-      {/* Field name — monospace */}
       <input
         ref={nameRef}
         type="text"
@@ -347,7 +595,6 @@ function FieldRow({
         className="w-40 shrink-0 rounded border border-transparent bg-slate-50 px-2 py-1 font-mono text-sm text-slate-800 placeholder:text-slate-400 hover:border-slate-300 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-100"
       />
 
-      {/* Type select */}
       <select
         defaultValue={field.type}
         onChange={(e) => onUpdate({ type: e.target.value })}
@@ -360,7 +607,6 @@ function FieldRow({
         ))}
       </select>
 
-      {/* Constraint badges */}
       <div className="flex shrink-0 gap-1">
         <ConstraintBadge
           active={field.isPK}
@@ -388,7 +634,6 @@ function FieldRow({
         />
       </div>
 
-      {/* Notes */}
       <input
         type="text"
         defaultValue={field.notes}
@@ -397,7 +642,6 @@ function FieldRow({
         className="min-w-0 flex-1 rounded border border-transparent bg-slate-50 px-2 py-1 text-sm text-slate-600 placeholder:text-slate-400 hover:border-slate-300 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-100"
       />
 
-      {/* Delete */}
       <button
         onClick={onDelete}
         title="Remove field"
@@ -409,7 +653,7 @@ function FieldRow({
   );
 }
 
-// ------- ConstraintBadge ----------------------------------------------------
+// ---- ConstraintBadge --------------------------------------------------------
 
 function ConstraintBadge({
   active,
@@ -439,7 +683,7 @@ function ConstraintBadge({
   );
 }
 
-// ------- SVG helpers --------------------------------------------------------
+// ---- SVG helpers ------------------------------------------------------------
 
 function DragIcon() {
   return (

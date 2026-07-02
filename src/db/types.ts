@@ -61,6 +61,7 @@ export interface Problem {
   functionalReqs: Requirement[];
   nonFunctionalReqs: Requirement[];
   apiEndpoints: ApiEndpoint[];
+  erDiagramScene?: unknown;
   createdAt: number;
   updatedAt: number;
 }
