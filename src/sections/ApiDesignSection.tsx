@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ApiEndpoint, ApiStatusCode, HttpMethod, Problem } from '../db/types';
 import {
   addApiEndpoint,
@@ -194,7 +194,7 @@ function EndpointCard({
       {/* Body fields */}
       <div className="space-y-3 px-3 py-3">
         <BodyField label="Request body">
-          <JsonTextarea
+          <JsonEditor
             rows={3}
             defaultValue={endpoint.requestBody}
             placeholder='{ "userId": "string" }'
@@ -204,7 +204,7 @@ function EndpointCard({
         </BodyField>
 
         <BodyField label="Response body">
-          <JsonTextarea
+          <JsonEditor
             rows={3}
             defaultValue={endpoint.responseBody}
             placeholder='{ "id": "string", "shortUrl": "string" }'
@@ -313,7 +313,7 @@ function StatusCodeRow({ statusCode, onChangeCode, onChangeBody, onRemove }: Sta
       </div>
       {/* Response body */}
       <div className="border-t border-slate-200 px-2 py-1.5">
-        <JsonTextarea
+        <JsonEditor
           rows={2}
           defaultValue={statusCode.responseBody}
           placeholder='{ "error": "Not found" }'
@@ -325,29 +325,94 @@ function StatusCodeRow({ statusCode, onChangeCode, onChangeBody, onRemove }: Sta
   );
 }
 
-interface JsonTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+interface JsonEditorProps {
   defaultValue: string;
   onSave: (value: string) => void;
+  rows?: number;
+  placeholder?: string;
+  className?: string;
 }
 
-function JsonTextarea({ defaultValue, onSave, ...rest }: JsonTextareaProps) {
+function JsonEditor({ defaultValue, onSave, rows, placeholder, className }: JsonEditorProps) {
+  const [value, setValue] = useState(defaultValue);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const cursorRef = useRef<number | null>(null);
+
+  // Apply deferred cursor after React reconciles the controlled value.
+  useLayoutEffect(() => {
+    if (cursorRef.current !== null && ref.current) {
+      ref.current.setSelectionRange(cursorRef.current, cursorRef.current);
+      cursorRef.current = null;
+    }
+  });
 
   function handleBlur() {
-    const raw = ref.current?.value ?? '';
-    let out = raw;
+    let out = value;
     try {
-      out = JSON.stringify(JSON.parse(raw.trim()), null, 2);
+      out = JSON.stringify(JSON.parse(value.trim()), null, 2);
     } catch {
-      // not valid JSON — leave exactly as typed
+      // not valid JSON — leave as typed
     }
-    if (ref.current && out !== raw) {
-      ref.current.value = out;
-    }
+    if (out !== value) setValue(out);
     onSave(out);
   }
 
-  return <textarea ref={ref} defaultValue={defaultValue} onBlur={handleBlur} {...rest} />;
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    const el = ref.current;
+    if (!el) return;
+    const { selectionStart: ss, selectionEnd: se } = el;
+
+    // Auto-close { and [
+    if (e.key === '{' || e.key === '[') {
+      e.preventDefault();
+      const close = e.key === '{' ? '}' : ']';
+      setValue(value.slice(0, ss) + e.key + close + value.slice(se));
+      cursorRef.current = ss + 1;
+      return;
+    }
+
+    // Smart Enter: maintain indent, add extra level between matched brackets
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const before = value.slice(0, ss);
+      const after = value.slice(se);
+      const indent = (before.slice(before.lastIndexOf('\n') + 1).match(/^(\s*)/) ?? ['', ''])[1];
+      const prev = before.trimEnd().slice(-1);
+      const next = after.trimStart()[0];
+      if ((prev === '{' && next === '}') || (prev === '[' && next === ']')) {
+        setValue(before + '\n' + indent + '  ' + '\n' + indent + after);
+        cursorRef.current = ss + 1 + indent.length + 2;
+      } else {
+        setValue(before + '\n' + indent + after);
+        cursorRef.current = ss + 1 + indent.length;
+      }
+      return;
+    }
+
+    // Smart backspace: delete empty {} or [] pair at once
+    if (e.key === 'Backspace' && ss === se && ss > 0) {
+      const cb = value[ss - 1];
+      const ca = value[ss];
+      if ((cb === '{' && ca === '}') || (cb === '[' && ca === ']')) {
+        e.preventDefault();
+        setValue(value.slice(0, ss - 1) + value.slice(ss + 1));
+        cursorRef.current = ss - 1;
+      }
+    }
+  }
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      rows={rows}
+      placeholder={placeholder}
+      className={className}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+    />
+  );
 }
 
 function BodyField({ label, children }: { label: string; children: React.ReactNode }) {
