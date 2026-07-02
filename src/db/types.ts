@@ -29,6 +29,27 @@ export interface ApiEndpoint {
   statusCodes?: ApiStatusCode[];
 }
 
+export interface EntityField {
+  id: string;
+  name: string;
+  type: string;
+  isPK: boolean;
+  isFK: boolean;
+  isRequired: boolean;
+  notes: string;
+}
+
+export interface DataModelEntity {
+  id: string;
+  problemId: string;
+  name: string;
+  description: string;
+  fields: EntityField[];
+  order: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface Problem {
   id: string;
   title: string;

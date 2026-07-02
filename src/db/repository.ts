@@ -1,6 +1,6 @@
 import { db } from './database';
 import { newId } from '../lib/id';
-import type { Problem, ApiEndpoint, ApiStatusCode, DeepDive } from './types';
+import type { Problem, ApiEndpoint, ApiStatusCode, DeepDive, DataModelEntity, EntityField } from './types';
 
 // ---- Problems -------------------------------------------------------------
 
@@ -46,9 +46,10 @@ export async function toggleCompleted(id: string): Promise<void> {
 
 // Deletes the problem and everything attached to it (cascade).
 export async function deleteProblem(id: string): Promise<void> {
-  await db.transaction('rw', db.problems, db.designPages, db.deepDives, async () => {
+  await db.transaction('rw', db.problems, db.designPages, db.deepDives, db.dataModelEntities, async () => {
     await db.designPages.where('problemId').equals(id).delete();
     await db.deepDives.where('problemId').equals(id).delete();
+    await db.dataModelEntities.where('problemId').equals(id).delete();
     await db.problems.delete(id);
   });
 }
@@ -373,6 +374,109 @@ export async function reorderDeepDives(
         });
     }
   });
+}
+
+// ---- Data Model Entities --------------------------------------------------
+// Each entity holds its fields as an embedded array (small, always loaded
+// together). Entity records live in their own table, keyed by problemId.
+
+export const FIELD_TYPES = [
+  'string', 'text', 'integer', 'bigint', 'float',
+  'boolean', 'timestamp', 'uuid', 'enum', 'json', 'array', 'blob',
+];
+
+export async function createDataModelEntity(problemId: string): Promise<string> {
+  const now = Date.now();
+  const id = newId('dme');
+  const order = await db.dataModelEntities.where('problemId').equals(problemId).count();
+  await db.dataModelEntities.add({
+    id, problemId, name: '', description: '', fields: [], order, createdAt: now, updatedAt: now,
+  });
+  return id;
+}
+
+export async function updateDataModelEntity(
+  id: string,
+  changes: Partial<DataModelEntity>,
+): Promise<void> {
+  await db.dataModelEntities.update(id, { ...changes, updatedAt: Date.now() });
+}
+
+export async function deleteDataModelEntity(id: string): Promise<void> {
+  await db.dataModelEntities.delete(id);
+}
+
+export async function reorderDataModelEntities(
+  problemId: string,
+  orderedIds: string[],
+): Promise<void> {
+  const now = Date.now();
+  await db.transaction('rw', db.dataModelEntities, async () => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.dataModelEntities
+        .where('id')
+        .equals(orderedIds[i])
+        .modify((e) => {
+          if (e.problemId === problemId) { e.order = i; e.updatedAt = now; }
+        });
+    }
+  });
+}
+
+export async function addEntityField(entityId: string): Promise<string> {
+  const id = newId('fld');
+  await db.dataModelEntities
+    .where('id')
+    .equals(entityId)
+    .modify((e) => {
+      e.fields = [
+        ...e.fields,
+        { id, name: '', type: 'string', isPK: false, isFK: false, isRequired: false, notes: '' },
+      ];
+      e.updatedAt = Date.now();
+    });
+  return id;
+}
+
+export async function updateEntityField(
+  entityId: string,
+  fieldId: string,
+  changes: Partial<EntityField>,
+): Promise<void> {
+  await db.dataModelEntities
+    .where('id')
+    .equals(entityId)
+    .modify((e) => {
+      const f = e.fields.find((x) => x.id === fieldId);
+      if (f) Object.assign(f, changes);
+      e.updatedAt = Date.now();
+    });
+}
+
+export async function deleteEntityField(entityId: string, fieldId: string): Promise<void> {
+  await db.dataModelEntities
+    .where('id')
+    .equals(entityId)
+    .modify((e) => {
+      e.fields = e.fields.filter((x) => x.id !== fieldId);
+      e.updatedAt = Date.now();
+    });
+}
+
+export async function reorderEntityFields(
+  entityId: string,
+  orderedIds: string[],
+): Promise<void> {
+  await db.dataModelEntities
+    .where('id')
+    .equals(entityId)
+    .modify((e) => {
+      const byId = new Map(e.fields.map((f) => [f.id, f]));
+      e.fields = orderedIds
+        .map((id) => byId.get(id))
+        .filter((f): f is NonNullable<typeof f> => Boolean(f));
+      e.updatedAt = Date.now();
+    });
 }
 
 // ---- Seed -----------------------------------------------------------------

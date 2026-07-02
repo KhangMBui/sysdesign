@@ -2,10 +2,12 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useProblem } from '../hooks/useProblems';
 import { useDesignPages } from '../hooks/useDesignPages';
 import { useDeepDives } from '../hooks/useDeepDives';
+import { useDataModelEntities } from '../hooks/useDataModelEntities';
 import { updateProblem } from '../db/repository';
 import { DifficultyBadge, inputClass } from '../components/ui';
 import RequirementsSection from '../sections/RequirementsSection';
 import ApiDesignSection from '../sections/ApiDesignSection';
+import DataModelSection from '../sections/DataModelSection';
 import DesignSection from '../sections/DesignSection';
 import DeepDivesSection from '../sections/DeepDivesSection';
 import type { Problem } from '../db/types';
@@ -18,6 +20,7 @@ const SECTIONS = [
   { key: 'functional', label: 'Functional Reqs' },
   { key: 'nonfunctional', label: 'Non-Functional Reqs' },
   { key: 'api', label: 'API Design' },
+  { key: 'datamodel', label: 'Data Model' },
   { key: 'design', label: 'High-Level Design' },
   { key: 'deepdives', label: 'Deep Dives' },
 ] as const;
@@ -30,6 +33,7 @@ export default function ProblemDetailPage() {
   const problem = useProblem(problemId);
   const designPages = useDesignPages(problemId);
   const deepDives = useDeepDives(problemId);
+  const dataModelEntities = useDataModelEntities(problemId);
   const active: SectionKey =
     (SECTIONS.find((s) => s.key === section)?.key as SectionKey) ?? 'overview';
 
@@ -54,6 +58,7 @@ export default function ProblemDetailPage() {
     functional: problem.functionalReqs.length,
     nonfunctional: problem.nonFunctionalReqs.length,
     api: problem.apiEndpoints.length,
+    datamodel: dataModelEntities?.length ?? null,
     design: designPages?.length ?? null,
     deepdives: deepDives?.length ?? null,
   };
@@ -121,6 +126,8 @@ export default function ProblemDetailPage() {
         />
       ) : active === 'api' ? (
         <ApiDesignSection problem={problem} />
+      ) : active === 'datamodel' ? (
+        <DataModelSection problem={problem} />
       ) : active === 'design' ? (
         <DesignSection problem={problem} />
       ) : active === 'deepdives' ? (
