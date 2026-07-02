@@ -8,6 +8,7 @@ import Modal from '../components/Modal';
 import type { Difficulty, Problem } from '../db/types';
 
 const filters: Difficulty[] = ['', 'Junior', 'Mid-Level', 'Senior'];
+const DIFFICULTY_ORDER: Record<string, number> = { Junior: 0, 'Mid-Level': 1, Senior: 2, '': 3 };
 
 export default function ProblemListPage() {
   const problems = useProblems();
@@ -22,14 +23,20 @@ export default function ProblemListPage() {
   const filtered = useMemo(() => {
     if (!problems) return [];
     const q = query.trim().toLowerCase();
-    return problems.filter((p) => {
-      if (difficulty && p.difficulty !== difficulty) return false;
-      if (!q) return true;
-      return (
-        p.title.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q)
-      );
-    });
+    return problems
+      .filter((p) => {
+        if (difficulty && p.difficulty !== difficulty) return false;
+        if (!q) return true;
+        return (
+          p.title.toLowerCase().includes(q) ||
+          p.description.toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => {
+        const da = DIFFICULTY_ORDER[a.difficulty] ?? 3;
+        const db = DIFFICULTY_ORDER[b.difficulty] ?? 3;
+        return da !== db ? da - db : a.title.localeCompare(b.title);
+      });
   }, [problems, query, difficulty]);
 
   function openCreate() {

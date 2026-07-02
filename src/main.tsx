@@ -1,13 +1,17 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
-import { seedIfEmpty } from './db/repository';
+import { AuthProvider } from './contexts/AuthContext';
+import { queryClient } from './lib/queryClient';
 import './index.css';
-
-seedIfEmpty();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </QueryClientProvider>
   </StrictMode>,
 );

@@ -1,4 +1,5 @@
 import { Link, Outlet } from 'react-router-dom';
+import UserMenu from './UserMenu';
 
 export default function Layout() {
   return (
@@ -13,6 +14,9 @@ export default function Layout() {
               System Design Practice
             </span>
           </Link>
+          <div className="ml-auto">
+            <UserMenu />
+          </div>
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">

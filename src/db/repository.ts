@@ -1,5 +1,7 @@
 import { db } from './database';
 import { newId } from '../lib/id';
+import { getCurrentUser } from '../lib/authStore';
+import * as remote from '../api/remoteRepository';
 import type { Problem, ApiEndpoint, ApiStatusCode, DeepDive, DataModelEntity, EntityField } from './types';
 
 // ---- Problems -------------------------------------------------------------
@@ -12,6 +14,7 @@ export type NewProblemInput = Pick<
 export async function createProblem(
   input: Partial<NewProblemInput>,
 ): Promise<Problem> {
+  if (getCurrentUser()) return remote.createProblemRemote(input);
   const now = Date.now();
   const problem: Problem = {
     id: newId('prob'),
@@ -35,10 +38,12 @@ export async function updateProblem(
   id: string,
   changes: Partial<Problem>,
 ): Promise<void> {
+  if (getCurrentUser()) return remote.updateProblemRemote(id, changes);
   await db.problems.update(id, { ...changes, updatedAt: Date.now() });
 }
 
 export async function toggleCompleted(id: string): Promise<void> {
+  if (getCurrentUser()) return remote.toggleCompletedRemote(id);
   const p = await db.problems.get(id);
   if (!p) return;
   await updateProblem(id, { completed: !p.completed });
@@ -46,6 +51,7 @@ export async function toggleCompleted(id: string): Promise<void> {
 
 // Deletes the problem and everything attached to it (cascade).
 export async function deleteProblem(id: string): Promise<void> {
+  if (getCurrentUser()) return remote.deleteProblemRemote(id);
   await db.transaction('rw', db.problems, db.designPages, db.deepDives, db.dataModelEntities, async () => {
     await db.designPages.where('problemId').equals(id).delete();
     await db.deepDives.where('problemId').equals(id).delete();
@@ -65,6 +71,7 @@ export async function addRequirement(
   problemId: string,
   field: ReqField,
 ): Promise<string> {
+  if (getCurrentUser()) return remote.addRequirementRemote(problemId, field);
   const id = newId('req');
   await db.problems
     .where('id')
@@ -82,6 +89,7 @@ export async function updateRequirement(
   reqId: string,
   text: string,
 ): Promise<void> {
+  if (getCurrentUser()) return remote.updateRequirementRemote(problemId, field, reqId, text);
   await db.problems
     .where('id')
     .equals(problemId)
@@ -97,6 +105,7 @@ export async function deleteRequirement(
   field: ReqField,
   reqId: string,
 ): Promise<void> {
+  if (getCurrentUser()) return remote.deleteRequirementRemote(problemId, field, reqId);
   await db.problems
     .where('id')
     .equals(problemId)
@@ -111,6 +120,7 @@ export async function reorderRequirements(
   field: ReqField,
   orderedIds: string[],
 ): Promise<void> {
+  if (getCurrentUser()) return remote.reorderRequirementsRemote(problemId, field, orderedIds);
   await db.problems
     .where('id')
     .equals(problemId)
@@ -160,6 +170,7 @@ export const HTTP_STATUS_CODES = [
 ];
 
 export async function addApiEndpoint(problemId: string): Promise<string> {
+  if (getCurrentUser()) return remote.addApiEndpointRemote(problemId);
   const id = newId('ep');
   await db.problems
     .where('id')
@@ -179,6 +190,7 @@ export async function updateApiEndpoint(
   endpointId: string,
   changes: Partial<ApiEndpoint>,
 ): Promise<void> {
+  if (getCurrentUser()) return remote.updateApiEndpointRemote(problemId, endpointId, changes);
   await db.problems
     .where('id')
     .equals(problemId)
@@ -193,6 +205,7 @@ export async function deleteApiEndpoint(
   problemId: string,
   endpointId: string,
 ): Promise<void> {
+  if (getCurrentUser()) return remote.deleteApiEndpointRemote(problemId, endpointId);
   await db.problems
     .where('id')
     .equals(problemId)
@@ -206,6 +219,7 @@ export async function reorderApiEndpoints(
   problemId: string,
   orderedIds: string[],
 ): Promise<void> {
+  if (getCurrentUser()) return remote.reorderApiEndpointsRemote(problemId, orderedIds);
   await db.problems
     .where('id')
     .equals(problemId)
@@ -222,6 +236,7 @@ export async function addApiStatusCode(
   problemId: string,
   endpointId: string,
 ): Promise<string> {
+  if (getCurrentUser()) return remote.addApiStatusCodeRemote(problemId, endpointId);
   const id = newId('sc');
   await db.problems
     .where('id')
@@ -242,6 +257,7 @@ export async function updateApiStatusCode(
   statusCodeId: string,
   changes: Partial<ApiStatusCode>,
 ): Promise<void> {
+  if (getCurrentUser()) return remote.updateApiStatusCodeRemote(problemId, endpointId, statusCodeId, changes);
   await db.problems
     .where('id')
     .equals(problemId)
@@ -260,6 +276,7 @@ export async function deleteApiStatusCode(
   endpointId: string,
   statusCodeId: string,
 ): Promise<void> {
+  if (getCurrentUser()) return remote.deleteApiStatusCodeRemote(problemId, endpointId, statusCodeId);
   await db.problems
     .where('id')
     .equals(problemId)
@@ -280,6 +297,7 @@ export async function createDesignPage(
   problemId: string,
   title = 'Design v1',
 ): Promise<string> {
+  if (getCurrentUser()) return remote.createDesignPageRemote(problemId, title);
   const now = Date.now();
   const id = newId('dp');
   const order = await db.designPages.where('problemId').equals(problemId).count();
@@ -288,18 +306,22 @@ export async function createDesignPage(
 }
 
 export async function updateDesignPageScene(id: string, scene: unknown): Promise<void> {
+  if (getCurrentUser()) return remote.updateDesignPageSceneRemote(id, scene);
   await db.designPages.update(id, { scene, updatedAt: Date.now() });
 }
 
 export async function updateDesignPageNotes(id: string, notes: string): Promise<void> {
+  if (getCurrentUser()) return remote.updateDesignPageNotesRemote(id, notes);
   await db.designPages.update(id, { notes, updatedAt: Date.now() });
 }
 
 export async function renameDesignPage(id: string, title: string): Promise<void> {
+  if (getCurrentUser()) return remote.renameDesignPageRemote(id, title);
   await db.designPages.update(id, { title, updatedAt: Date.now() });
 }
 
 export async function deleteDesignPage(id: string): Promise<void> {
+  if (getCurrentUser()) return remote.deleteDesignPageRemote(id);
   await db.designPages.delete(id);
 }
 
@@ -307,6 +329,7 @@ export async function reorderDesignPages(
   problemId: string,
   orderedIds: string[],
 ): Promise<void> {
+  if (getCurrentUser()) return remote.reorderDesignPagesRemote(problemId, orderedIds);
   const now = Date.now();
   await db.transaction('rw', db.designPages, async () => {
     for (let i = 0; i < orderedIds.length; i++) {
@@ -328,6 +351,7 @@ export async function reorderDesignPages(
 // own table, keyed by problemId and sorted by `order`.
 
 export async function createDeepDive(problemId: string): Promise<string> {
+  if (getCurrentUser()) return remote.createDeepDiveRemote(problemId);
   const now = Date.now();
   const id = newId('dd');
   const order = await db.deepDives.where('problemId').equals(problemId).count();
@@ -349,10 +373,12 @@ export async function updateDeepDive(
   id: string,
   changes: Partial<DeepDive>,
 ): Promise<void> {
+  if (getCurrentUser()) return remote.updateDeepDiveRemote(id, changes);
   await db.deepDives.update(id, { ...changes, updatedAt: Date.now() });
 }
 
 export async function deleteDeepDive(id: string): Promise<void> {
+  if (getCurrentUser()) return remote.deleteDeepDiveRemote(id);
   await db.deepDives.delete(id);
 }
 
@@ -360,6 +386,7 @@ export async function reorderDeepDives(
   problemId: string,
   orderedIds: string[],
 ): Promise<void> {
+  if (getCurrentUser()) return remote.reorderDeepDivesRemote(problemId, orderedIds);
   const now = Date.now();
   await db.transaction('rw', db.deepDives, async () => {
     for (let i = 0; i < orderedIds.length; i++) {
@@ -386,6 +413,7 @@ export const FIELD_TYPES = [
 ];
 
 export async function createDataModelEntity(problemId: string): Promise<string> {
+  if (getCurrentUser()) return remote.createDataModelEntityRemote(problemId);
   const now = Date.now();
   const id = newId('dme');
   const order = await db.dataModelEntities.where('problemId').equals(problemId).count();
@@ -399,10 +427,12 @@ export async function updateDataModelEntity(
   id: string,
   changes: Partial<DataModelEntity>,
 ): Promise<void> {
+  if (getCurrentUser()) return remote.updateDataModelEntityRemote(id, changes);
   await db.dataModelEntities.update(id, { ...changes, updatedAt: Date.now() });
 }
 
 export async function deleteDataModelEntity(id: string): Promise<void> {
+  if (getCurrentUser()) return remote.deleteDataModelEntityRemote(id);
   await db.dataModelEntities.delete(id);
 }
 
@@ -410,6 +440,7 @@ export async function reorderDataModelEntities(
   problemId: string,
   orderedIds: string[],
 ): Promise<void> {
+  if (getCurrentUser()) return remote.reorderDataModelEntitiesRemote(problemId, orderedIds);
   const now = Date.now();
   await db.transaction('rw', db.dataModelEntities, async () => {
     for (let i = 0; i < orderedIds.length; i++) {
@@ -424,6 +455,7 @@ export async function reorderDataModelEntities(
 }
 
 export async function addEntityField(entityId: string): Promise<string> {
+  if (getCurrentUser()) return remote.addEntityFieldRemote(entityId);
   const id = newId('fld');
   await db.dataModelEntities
     .where('id')
@@ -443,6 +475,7 @@ export async function updateEntityField(
   fieldId: string,
   changes: Partial<EntityField>,
 ): Promise<void> {
+  if (getCurrentUser()) return remote.updateEntityFieldRemote(entityId, fieldId, changes);
   await db.dataModelEntities
     .where('id')
     .equals(entityId)
@@ -454,6 +487,7 @@ export async function updateEntityField(
 }
 
 export async function deleteEntityField(entityId: string, fieldId: string): Promise<void> {
+  if (getCurrentUser()) return remote.deleteEntityFieldRemote(entityId, fieldId);
   await db.dataModelEntities
     .where('id')
     .equals(entityId)
@@ -467,6 +501,7 @@ export async function reorderEntityFields(
   entityId: string,
   orderedIds: string[],
 ): Promise<void> {
+  if (getCurrentUser()) return remote.reorderEntityFieldsRemote(entityId, orderedIds);
   await db.dataModelEntities
     .where('id')
     .equals(entityId)
@@ -484,6 +519,7 @@ export async function reorderEntityFields(
 // Populates a couple of example problems the first time the app is opened,
 // so the list isn't empty. Safe to call on every startup.
 export async function seedIfEmpty(): Promise<void> {
+  if (getCurrentUser()) return;
   const count = await db.problems.count();
   if (count > 0) return;
   await createProblem({

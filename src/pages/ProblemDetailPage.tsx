@@ -1,10 +1,11 @@
+import React, { forwardRef, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useProblem } from '../hooks/useProblems';
 import { useDesignPages } from '../hooks/useDesignPages';
 import { useDeepDives } from '../hooks/useDeepDives';
 import { useDataModelEntities } from '../hooks/useDataModelEntities';
 import { updateProblem } from '../db/repository';
-import { DifficultyBadge, inputClass } from '../components/ui';
+import { Button, DifficultyBadge, inputClass } from '../components/ui';
 import RequirementsSection from '../sections/RequirementsSection';
 import ApiDesignSection from '../sections/ApiDesignSection';
 import DataModelSection from '../sections/DataModelSection';
@@ -140,61 +141,104 @@ export default function ProblemDetailPage() {
 }
 
 function OverviewSection({ problem }: { problem: Problem }) {
-  // Auto-save on blur keeps things simple and avoids a save button.
-  const save = (changes: Partial<Problem>) => updateProblem(problem.id, changes);
+  const allEmpty = !problem.description && !problem.constraints && !problem.notes;
+  const [editing, setEditing] = useState(allEmpty);
+  const descRef = useRef<HTMLTextAreaElement>(null);
+  const constraintsRef = useRef<HTMLTextAreaElement>(null);
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+
+  function save() {
+    updateProblem(problem.id, {
+      description: descRef.current?.value ?? problem.description,
+      constraints: constraintsRef.current?.value ?? problem.constraints,
+      notes: notesRef.current?.value ?? problem.notes,
+    });
+    setEditing(false);
+  }
+
+  if (!editing) {
+    return (
+      <div className="max-w-3xl">
+        <div className="mb-5 flex justify-end">
+          <Button variant="secondary" onClick={() => setEditing(true)}>Edit</Button>
+        </div>
+        <div className="space-y-8">
+          <OverviewField label="Description" text={problem.description} />
+          <OverviewField label="Constraints" text={problem.constraints} />
+          <OverviewField label="Notes / Extra Context" text={problem.notes} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl space-y-5">
-      <LabeledTextarea
-        label="Description"
-        rows={3}
-        defaultValue={problem.description}
-        onSave={(v) => save({ description: v })}
-      />
-      <LabeledTextarea
-        label="Constraints"
-        rows={3}
-        defaultValue={problem.constraints}
-        onSave={(v) => save({ constraints: v })}
-      />
-      <LabeledTextarea
-        label="Notes / extra context"
-        rows={4}
-        defaultValue={problem.notes}
-        onSave={(v) => save({ notes: v })}
-      />
-      <p className="text-xs text-slate-400">Changes save automatically when you click away.</p>
+      <OverviewTextarea label="Description" rows={3} defaultValue={problem.description} ref={descRef} />
+      <OverviewTextarea label="Constraints" rows={5} defaultValue={problem.constraints} ref={constraintsRef} />
+      <OverviewTextarea label="Notes / Extra Context" rows={4} defaultValue={problem.notes} ref={notesRef} />
+      <div className="flex items-center justify-between pt-1">
+        <p className="text-xs text-slate-400">
+          Use{' '}
+          <code className="rounded bg-slate-100 px-1 font-mono">**bold**</code>
+          {' '}to emphasise text. Each line becomes a bullet.
+        </p>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => setEditing(false)}>Cancel</Button>
+          <Button onClick={save}>Save</Button>
+        </div>
+      </div>
     </div>
   );
 }
 
-function LabeledTextarea({
-  label,
-  rows,
-  defaultValue,
-  onSave,
-}: {
-  label: string;
-  rows: number;
-  defaultValue: string;
-  onSave: (value: string) => void;
-}) {
+function OverviewField({ label, text }: { label: string; text: string }) {
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
   return (
+    <div>
+      <p className="mb-2.5 text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      {lines.length === 0 ? (
+        <p className="text-sm italic text-slate-400">—</p>
+      ) : (
+        <ul className="space-y-2">
+          {lines.map((line, i) => (
+            <li key={i} className="flex items-start gap-2.5 text-sm text-slate-700">
+              <span className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400" />
+              <span>{renderBold(line)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function renderBold(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  if (parts.length === 1) return text;
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.startsWith('**') && part.endsWith('**') ? (
+          <strong key={i} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
+const OverviewTextarea = forwardRef<HTMLTextAreaElement, { label: string; rows: number; defaultValue: string }>(
+  ({ label, rows, defaultValue }, ref) => (
     <label className="block">
       <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
         {label}
       </span>
-      <textarea
-        // key on defaultValue so switching problems resets the field
-        key={defaultValue}
-        rows={rows}
-        defaultValue={defaultValue}
-        onBlur={(e) => onSave(e.target.value)}
-        className={inputClass}
-      />
+      <textarea ref={ref} rows={rows} defaultValue={defaultValue} className={`${inputClass} resize-y`} />
     </label>
-  );
-}
+  ),
+);
+OverviewTextarea.displayName = 'OverviewTextarea';
 
 function ComingSoon({ label }: { label: string }) {
   return (

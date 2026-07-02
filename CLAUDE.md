@@ -6,12 +6,15 @@
 - Step 3: API design section
 - Step 4: High-level design canvas (Excalidraw, multiple pages, component palette)
 - Step 5: Deep Dives section (two-panel: left list, right editor)
-- **Next: Step 6** — Export/import JSON + responsive polish
+- Step 6: Data Model section (entity schema editor + Excalidraw ER diagram)
+- Step 7: User auth + Postgres backend (Express, dual-hook Dexie/React Query, guest→account import)
+- **Next: Step 8** — Export/import JSON + responsive polish
 
 ## Stack
 React 18 + TypeScript (strict, `noUnusedLocals`/`noUnusedParameters`), Vite 6,
 React Router v6, Dexie v4 (IndexedDB), `dexie-react-hooks` (`useLiveQuery`),
-Tailwind CSS v4 (`@tailwindcss/vite`), `@excalidraw/excalidraw` v0.18.
+Tailwind CSS v4 (`@tailwindcss/vite`), `@excalidraw/excalidraw` v0.18,
+Express 5 + postgres.js + bcryptjs + jsonwebtoken (server), `@tanstack/react-query` v5.
 
 ## Key conventions
 
